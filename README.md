@@ -452,4 +452,53 @@ scp remnux@172.16.204.100:~/files/output/ ~/Desktop/results/
 - [REMnux MCP Server](https://github.com/REMnux/remnux-mcp-server)
 - [OpenCode](https://opencode.ai)
 - [Ollama](https://ollama.com)
-- [Zeltser's Malware Analysis Lab Guide](https://zeltser.com/malware-analysis-lab-remnux)   
+- [Zeltser's Malware Analysis Lab Guide](https://zeltser.com/malware-analysis-lab-remnux)
+
+---
+
+#### Step 16: Build the Windows Victim VM *(host, GUI + Windows)*
+
+This VM is where you run malware samples for dynamic analysis. It connects to the isolated VMnet2 host-only network (from Step 4) with REMnux as its gateway.
+
+**Create the VM in VMware:**
+
+1. **File → New Virtual Machine**
+2. Choose **Typical** → **Next**
+3. Select **Installer disc image file (ISO)** → browse to your Windows ISO → **Next**
+4. Enter edition (e.g. Windows 11 Pro) → **Next**
+5. Set: **2 CPUs**, **4096 MB RAM**, **80 GB disk**
+6. **Customize Settings** before finishing:
+   - **Network Adapter** → **Custom: VMnet2** (the isolated host-only from Step 4)
+   - **Disable** Shared Folders and Drag and Drop
+7. **Finish** and power on
+
+**Install Windows** (standard OOBE — create a username with no spaces, e.g. `analyst`).
+
+After Windows boots, run this single block in **PowerShell as Administrator** to disable security features and Windows Update:
+
+```powershell
+# Disable Windows Defender real-time protection
+Set-MpPreference -DisableRealtimeMonitoring $true
+Set-MpPreference -DisableBehaviorMonitoring $true
+Set-MpPreference -DisableIOAVProtection $true
+Set-MpPreference -DisableArchiving $true
+
+# Disable Tamper Protection (requires registry)
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 1 /f
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" /v "DisableBehaviorMonitoring" /t REG_DWORD /d 1 /f
+
+# Disable Windows Update
+Set-Service -Name wuauserv -StartupType Disabled
+Stop-Service -Name wuauserv -Force
+Set-Service -Name bits -StartupType Disabled
+Stop-Service -Name bits -Force
+
+# Disable SmartScreen
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" /v "SmartScreenEnabled" /t REG_SZ /d "Off" /f
+
+# Disable firewall
+Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+
+# Disable hibernation (prevents hiberfil.sys from interfering)
+powercfg /hibernate off
+```
